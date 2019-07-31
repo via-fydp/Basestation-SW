@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+<xs:element name="test_procedure">
+<xs:complexType>
+  <xs:sequence>
+
+    <xs:element name="created_date" type="xs:date"/>
+    <xs:element name="author" type="xs:string"/>
+    <xs:element name="test_id" type="xs:string"/>
+
+    <xs:element name="steps">
+    <xs:complexType>
+    <xs:choice maxOccurs="unbounded">
+
+      <xs:element name="step">
+      <xs:complexType>
+      <xs:choice maxOccurs="unbounded">
+
+        <xs:element name="id" type="xs:integer" minOccurs="1" maxOccurs="1"/> <!-- TODO: enforce this -->
+
+
+        <xs:element name="readings"> <!-- measurements to be displayed while conducting this test -->
+        <xs:complexType>
+        <xs:choice maxOccurs="unbounded">
+          <xs:element name="reading" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+          <xs:sequence>
+            <xs:element name="label" type="xs:string"/>
+            <xs:element name="sensor_id" type="xs:string"/>
+          </xs:sequence>
+          </xs:complexType>
+          </xs:element>
+        </xs:choice>
+        </xs:complexType>
+        </xs:element>
+
+
+        <xs:element name="controls"> <!-- controls needed for the user during the test step -->
+        <xs:complexType>
+        <xs:choice maxOccurs="unbounded">
+          <xs:element name="control" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+          <xs:sequence>
+            <xs:element name="label" type="xs:string"/>
+            <xs:element name="control_type" type="xs:string"/> <!-- numerical input, shut-off, dropdown -->
+            <xs:element name="control_id" type="xs:string"/>
+          </xs:sequence>
+          </xs:complexType>
+          </xs:element>
+        </xs:choice>
+        </xs:complexType>
+        </xs:element>
+
+
+        <xs:element name="procedure"> <!-- how to carry out the step -->
+        <xs:complexType>
+        <xs:choice maxOccurs="unbounded">
+          <xs:element name="setup" maxOccurs="1">
+          <xs:complexType>
+          <xs:choice maxOccurs="unbounded">
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="action" type="xs:string" maxOccurs="unbounded"/> <!-- validate a measurement or make an adjustment -->
+          </xs:choice>
+          </xs:complexType>
+          </xs:element>
+          <xs:element name="sub_step" minOccurs="0" maxOccurs="unbounded">
+          <xs:complexType>
+          <xs:choice maxOccurs="unbounded">
+            <xs:element name="id" type="xs:string"/>
+            <xs:element name="action" type="xs:string" maxOccurs="unbounded"/> <!-- validate a measurement or make an adjustment -->
+          </xs:choice>
+          </xs:complexType>
+          </xs:element>
+        </xs:choice>
+        </xs:complexType>
+        </xs:element>
+
+      </xs:choice>
+      </xs:complexType>
+      </xs:element>
+
+    </xs:choice>
+    </xs:complexType>
+    </xs:element>
+
+  </xs:sequence>
+</xs:complexType>
+</xs:element>
+</xs:schema>
