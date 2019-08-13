@@ -73,12 +73,19 @@ class Procedure():
         author_xml = etree.SubElement(self._xml_tree, 'author')
         author_xml.text = author
 
+        test_name = test_id or str(uuid4())
         test_id_xml = etree.SubElement(self._xml_tree, 'test_id')
-        test_id_xml.text = test_id or str(uuid4())
+        test_id_xml.text =test_name
 
+        self._name = test_name
         self._test_steps_xml = etree.SubElement(self._xml_tree, 'steps')
         self._test_steps = {}
 
+    @property
+    def name(self):
+        return self._name
+    
+    def 
 
     def add_step(self, step_num):
         """ Add a step to the Procedure
@@ -98,8 +105,6 @@ class Procedure():
 
     def verify(self):
         """ Verify that the xml structure stored in the procedure adheres to the xml schema """
-
-        formatted_xml = minidom.parseString(etree.tostring(self._xml_tree)).toprettyxml(indent="  ")
         verify_with_schema(formatted_xml, self._schema)
 
 
