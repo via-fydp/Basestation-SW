@@ -11,6 +11,6 @@ def verify_with_schema(xml_str, schema_file):
         schema_file: the xsd schema file to validate against
     """
 
-    xmlschema_doc = etree.parse(open( schema, "r", encoding="utf-8"))
+    xmlschema_doc = etree.parse(open( schema_file, "r", encoding="utf-8"))
     xmlschema = etree.XMLSchema(xmlschema_doc)
     xmlschema.assertValid(etree.XML(xml_str))

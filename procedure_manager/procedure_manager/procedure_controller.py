@@ -1,4 +1,5 @@
 from ast import literal_eval
+from dataclasses import dataclass
 import logging
 from math import isclose
 import os
@@ -6,33 +7,34 @@ import yaml
 
 from lxml import etree
 
-from procedure_utils import verify_with_schema
-from procedure_builder import Procedure
-from procedure_reader import Proc_Reader
+from .procedure_utils import verify_with_schema
+from .procedure_builder import Procedure
+from .procedure_reader import Proc_Reader
 
-logger = logging.getLogger('control_logger')
-logger.setLevel(logging.DEBUG)
-# create file handler which logs even debug messages
-fh = logging.FileHandler('controller.log')
-fh.setLevel(logging.DEBUG)
-# create console handler with a higher log level
-ch = logging.StreamHandler()
-ch.setLevel(logging.ERROR)
-# create formatter and add it to the handlers
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-fh.setFormatter(formatter)
-# add the handlers to logger
-logger.addHandler(ch)
-logger.addHandler(fh)
+def make_logger():
+    logger = logging.getLogger('control_logger')
+    logger.setLevel(logging.DEBUG)
+    # create file handler which logs even debug messages
+    fh = logging.FileHandler('controller.log')
+    fh.setLevel(logging.DEBUG)
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.ERROR)
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
+    # add the handlers to logger
+    logger.addHandler(ch)
+    logger.addHandler(fh)
 
-
-action_functions = {
-    'check': {
-        'pressure_sensor': check_pressure_sensor,
-        'user_validate': check_user_validate
+def init_action_functions():
+    action_functions = {
+        'check': {
+            'pressure_sensor': check_pressure_sensor,
+            'user_validate': check_user_validate
+        }
     }
-}
 
 @dataclass
 class Step_Result:
@@ -44,11 +46,11 @@ class Step_Result:
 class Action_Result:
     """ Class to keep track of test step results """
     error: bool
+    result_tip: str
+    result_value: str
+    action_taken: str = None
     transmit: bool = False
     step_id: str = None
-    result_tip: str
-    action_taken: str = None
-    result_value: str
 
 class Proc_Controller():
 
@@ -150,7 +152,7 @@ def check_pressure_sensor(sensor_id, value, tolerance):
         if votes[vote]:
             pass_count = pass_count + 1
             pass_result = reading
-        else
+        else:
             fail_result = reading
 
     action_success = True if pass_count >= 2 else False

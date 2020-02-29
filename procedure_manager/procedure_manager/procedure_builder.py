@@ -5,7 +5,7 @@ from xml.dom import minidom
 
 from lxml import etree
 
-from procedure_utils import verify_with_schema
+from .procedure_utils import verify_with_schema
 
 class SubStep():
 
@@ -17,12 +17,11 @@ class SubStep():
 
     def add_action(self, fn_name, *params):
         action_xml = etree.SubElement(self._substep_xml, 'action')
-        action_xml.text = "perform:" + str(fn_name) + ":" + str(params)
+        action_xml.text = f"perform:{fn_name}:{params}"
 
-    def add_check(self, sensor_id, *params):
+    def add_check(self, sensor_id, *params, label):
         action_xml = etree.SubElement(self._substep_xml, 'action')
-        action_xml.text = "check:" + str(sensor_id) + ":" + str(params)
-
+        action_xml.text = f"check:{sensor_id}:{params}"
 
 class Step():
 
@@ -34,6 +33,7 @@ class Step():
         self._step_readings = etree.SubElement(self._step_xml, 'readings')
         self._step_controls = etree.SubElement(self._step_xml, 'controls')
         self._step_procedure = etree.SubElement(self._step_xml, 'procedure')
+        self._step_validations = etree.SubElement(self._step_xml, 'validations')
         self._setup = SubStep(self._step_xml, etree.SubElement(self._step_procedure, 'setup'), 'setup')
 
         self._substeps = {}
@@ -46,6 +46,15 @@ class Step():
 
         sensor_id_xml = etree.SubElement(reading, 'sensor_id')
         sensor_id_xml.text = sensor_id
+
+    def add_validation(self, validation_type, *params):
+        validate_xml = etree.SubElement(self._step_validations, 'validation')
+
+        type_xml = etree.SubElement(validate_xml, 'type')
+        type_xml.text = validation_type
+
+        parameters_xml = etree.SubElement(validate_xml, 'parameters')
+        parameters_xml.text = f"{params}"
 
     def add_substep(self, substep_id):
         substep = SubStep(self._step_xml, etree.SubElement(self._step_procedure, 'sub_step'), str(substep_id))
@@ -84,8 +93,6 @@ class Procedure():
     @property
     def name(self):
         return self._name
-    
-    def 
 
     def add_step(self, step_num):
         """ Add a step to the Procedure
