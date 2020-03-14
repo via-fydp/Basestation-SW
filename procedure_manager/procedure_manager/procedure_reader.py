@@ -103,9 +103,6 @@ class Proc_Reader():
 
             step = self._proc_dict['steps'][str(self.cur_step)]
             self.cur_step = self.cur_step + 1
-
-            print(f'Step: {step}')
-
             return step
 
 
