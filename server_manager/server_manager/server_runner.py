@@ -133,4 +133,4 @@ if __name__ == '__main__':
     app.config.update(
         SECRET_KEY='via_fydp_ak8w?hi-95'
     )
-    app.run()
+    app.run(host='0.0.0.0')
