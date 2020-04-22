@@ -1,4 +1,5 @@
 from flask import Flask, request, Response, session
+from flask_cors import CORS
 import procedure_manager as pm
 from procedure_manager.procedure_reader import Proc_Reader
 from device_manager.coms_manager import COM_Manager
@@ -8,6 +9,7 @@ from pprint import pprint as pp
 import json
 
 app = Flask(__name__)
+CORS(app)
 
 def validate_json_for(*required_fields):
     def validated_endpoint(endpoint_func):
@@ -31,19 +33,17 @@ def label_device():
     data = request.get_json()
     dev_label = data['device_label']
 
+    dev_label_id = data.get('old_label')
+    if dev_label_id:
+        COM_Manager().update_device_label(dev_label_id, dev_label)
+        return Response(f"Set the device label for {dev_label_id} to {dev_label}", status=200, mimetype="text/xml")
+
     dev_uuid = data.get('device_id')
     if dev_uuid:
         COM_Manager().set_device_label(dev_uuid, dev_label)
-        return Response(f"Set the device label for {dev_uuid} to {dev_label}", mimetype="text/xml")
+        return Response(f"Set the device label for {dev_uuid} to {dev_label}", status=200, mimetype="text/xml")
 
-    dev_label_id = data.get('old_label')
-    if dev_label_id:
-        if COM_Manager().update_device_label(dev_label_id, dev_label):
-            return Response(f"Set the device label for {dev_label_id} to {dev_label}", mimetype="text/xml")
-        else:
-            return Response(f"The label provided was not found", mimetype="text/xml")
-
-    return Response("Require either device_id or old_label headers", 400, mimetype="text/xml")
+    return Response("Require either device_id or old_label headers", status=400, mimetype="text/xml")
 
 @app.route('/clear_device_label', methods=['POST'])
 @validate_json_for('device_label')
@@ -51,7 +51,7 @@ def clear_device_label():
     device_label = request.get_json()['device_label']
     COM_Manager().clear_device_label(device_label)
 
-    return Response(f"Label '{device_label}' removed", mimetype="text/xml")
+    return Response(f"Label '{device_label}' removed", status=200, mimetype="text/xml")
 
 @app.route('/tests')
 def get_tests():
@@ -60,29 +60,39 @@ def get_tests():
 @app.route('/get_readings')
 def get_readings():
     reading = COM_Manager().get_readings()
-    print(f'Reading: {str(reading)}')
-    return Response(str(reading), mimetype='application/json')
+    print(f'Reading: {json.dumps(reading)}')
+    return Response(json.dumps(reading), status=200, mimetype="application/json")
+
+@app.route('/control_signals')
+def control_signals():
+    signals = COM_Manager().get_last_embedded_signals()
+    return Response(json.dumps({"signals": signals}), status=200, mimetype="application/json")
+
+@app.route('/battery')
+def battery():
+    values = COM_Manager().get_battery()
+    return Response(json.dumps(values), status=200, mimetype="application/json")
 
 @app.route('/pneumatic_ctrl', methods=['POST'])
 @validate_json_for('signal')
 def pneumatic_ctrl():
     signal = request.get_json()['signal']
     COM_Manager().send_pneu_ctrl(signal)
-    return Response(f"Signal {signal} sent", mimetype='text/xml')
+    return Response(f"Signal {signal} sent", status=200, mimetype='text/xml')
 
 @app.route('/active_user', methods=['GET', 'POST'])
 def active_user():
     data = request.get_json()
     if request.method == 'POST':
         if 'user' not in data:
-            return Response("POST request must include the 'user' header", 400, mimetype='text/xml')
+            return Response("POST request must include the 'user' header", status=400, mimetype='text/xml')
         user = data['user']
         session['user'] = user
-        return Response(f"Active user set to {user}", mimetype='text/xml')
+        return Response(f"Active user set to {user}", status=200, mimetype='text/xml')
 
     if 'user' not in session:
-        return Response("No active user", mimetype='text/xml')
-    return Response(session['user'], mimetype='text/xml')
+        return Response("No active user", status=200, mimetype='text/xml')
+    return Response(session['user'], status=200, mimetype='text/xml')
 
 @app.route('/start_test')
 def start_test():
@@ -94,11 +104,11 @@ def load_procedure():
     Proc_Reader("test_schema.xsd", "output.xml")
     Proc_Reader().get_dict_proc()
     r = str(Proc_Reader())
-    return Response(r, mimetype='text/xml')
+    return Response(r, status=200, mimetype='text/xml')
 
 @app.route('/next_step')
 def next_step():
-    return Response(json.dumps(Proc_Reader().get_step()), mimetype='json')
+    return Response(json.dumps(Proc_Reader().get_step()), status=200, mimetype='json')
 
 @app.route('/stop_test')
 def stop_test():

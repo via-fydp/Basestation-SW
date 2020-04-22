@@ -1,6 +1,7 @@
 import atexit
 import copy
 import yaml
+import logging
 from multiprocessing import Process, Lock, Manager, Queue
 import time
 import threading
@@ -10,9 +11,10 @@ import os
 import serial
 import serial.tools.list_ports
 
-FAULTY_PRESSURE_OFFSET = 3
+FAULTY_PRESSURE_OFFSET = 300
 FAILED_SENSOR_THRESHOLD = 5
-DEBUG = 1
+SIGNAL_HISTORY = 50
+DEBUG = 0
 
 class Fake_COM:
     def __init__(self):
@@ -29,7 +31,7 @@ def register_failed_sensor():
 
 def validate_pressures(fault, p1, p2):
     if int(fault):
-        return "ERR"
+        return "FAULT"
 
     i_p1 = float(p1)
     i_p2 = float(p2)
@@ -40,47 +42,129 @@ def validate_pressures(fault, p1, p2):
 
     return (i_p1 + i_p2)/2
 
+def register_signal(context, signal):
+    sig_queue = context['signals_list']
 
-def read_pressure(reading_dict, fault_dict, serial_com):
+    if len(sig_queue) >= SIGNAL_HISTORY:
+        sig_queue.pop(0)
+
+    sig_queue.append(signal)
+
+def record_pressure(context, signal):
+    _, sens_uuid, fault, p1, p2 = signal.split('_')
+    fault_dict = context['fault_dict']
+    reading_dict = context['reading_dict']['pressures']
+
+    if fault_dict.get(sens_uuid, 0) > FAILED_SENSOR_THRESHOLD:
+        reading_dict[sens_uuid] = "FAULT"
+        return
+
+    pressure_result = validate_pressures(fault, p1, p2)
+    reading_dict[sens_uuid] = pressure_result
+
+    if pressure_result == "ERR":
+        fault_dict[sens_uuid] = fault_dict.get(sens_uuid, 0) + 1
+        if fault_dict[sens_uuid] > FAILED_SENSOR_THRESHOLD:
+            reading_dict[sens_uuid] = "FAULT"
+
+    context['reading_dict']['pressures'] = reading_dict
+
+def record_battery(context, signal):
+    _, device_uuid, val, _, charging = signal.split('_')
+    reading_dict = context['reading_dict']['battery']
+    reading_dict[device_uuid] = {'value': val, 'charging': charging}
+    context['reading_dict']['battery'] = reading_dict
+
+def register_signal_ack_nack(context, sig):
+    pass
+
+def no_valid_signal(*args):
+    print("Signal invalid")
+
+signal_func = {
+    'pressure': record_pressure,
+    'battery': record_battery,
+    'ack': register_signal_ack_nack,
+    'nack': register_signal_ack_nack,
+}
+
+def read_signals(reading_dict, signals_queue, fault_dict, serial_com):
+    logger = logging.getLogger("COM_logger")
+
+    context = {
+        'reading_dict': reading_dict,
+        'signals_list': signals_queue,
+        'fault_dict': fault_dict,
+    }
 
     while(True):
-        reading = serial_com.readline()
-        r_type, sens_id, fault, p1, p2 = reading.split('_')
+        try:
+            signal = serial_com.readline().decode('utf-8').strip('\n')
+            if signal:
+                logger.debug(f'Signal: {signal}')
+                s_type, args = signal.split('_', 1)
 
-        if fault_dict.get(sens_id, 0) > FAILED_SENSOR_THRESHOLD:
-            reading_dict[sens_id] = "FAULT"
-            continue
+                try:
+                    register_signal(context, signal)
+                    signal_func.get(s_type, no_valid_signal)(context, signal)
+                except Exception as err:
+                    logger.error(f"Error executing function on signal {signal}: {err}")
+        except Exception as err:
+            serial_com.reset_input_buffer()
+            logger.error(f"Error reading serial data:\n{err}")
 
-        if int(fault):
-            reading_dict[sens_id] = "FAULT"
-            continue
-
-        pressure_result = validate_pressures(fault, p1, p2)
-        reading_dict[sens_id] = pressure_result
-
-        if pressure_result == "ERR":
-            fault_dict[sens_id] = fault_dict.get(sens_id, 0) + 1
-            if fault_dict[sens_id] > FAILED_SENSOR_THRESHOLD:
-                reading_dict[sens_id] = "FAULT"
 
 def write_pressure(write_buffer, serial_com):
     while(True):
         while(not write_buffer.empty()):
             msg = write_buffer.get()
-            serial_com.write(msg.encode('utf-8'))
-        time.sleep(1)
+            serial_com.write(f'{msg}\n'.encode('utf-8'))
+        time.sleep(0.2)
 
 def clean_rx_tx(rx_thread):
     rx_thread.terminate()
 
-def start_rx_tx(reading_dict, fault_dict, write_buffer):
+def start_rx_tx(reading_dict, signals_queue, fault_dict, write_buffer):
+    """ Start threads to read from and write to the serial port connected to
+    the embedded controller
+    """
+    logger = logging.getLogger("COM_logger")
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler('/fydp/logging.log')
+    fh.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    # add the handlers to the logger
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
     if DEBUG:
         serial_com = Fake_COM()
     else:
-        serial_com = serial.Serial("COM4", baudrate=9600, timeout=5)
+        connection = 0
+        while not connection:
+            try:
+                serial_com = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+                signal = serial_com.readline()
+                if signal:
+                    connection = 1
+                    break
+                print("No data over serial")
+            except Exception as err:
+                logger.error(f"Error creating serial port: {err}")
+                time.sleep(2)
 
-    rx_thread = threading.Thread(target=read_pressure, args=(reading_dict, fault_dict, serial_com,))
-    tx_thread = threading.Thread(target=write_pressure, args=(write_buffer, serial_com,), daemon=True)
+    rx_thread = threading.Thread(
+        target=read_signals,
+        args=(reading_dict, signals_queue, fault_dict, serial_com,)
+        )
+    tx_thread = threading.Thread(
+        target=write_pressure,
+        args=(write_buffer, serial_com,), daemon=True
+        )
 
     rx_thread.start()
     tx_thread.start()
@@ -90,22 +174,34 @@ def start_rx_tx(reading_dict, fault_dict, write_buffer):
 
 class COM_Manager:
     instance = None
-    pressure_readings = None
+    device_readings = None
+    embedded_signals = None
+    sent_signals = None
     pressure_faults = None
     serial_com = None
     com_rx_tx_process = None
     com_read_process = None
     com_write_process = None
     write_buffer = None
+    signal_lock = None
 
     def __init__(self):
         if not COM_Manager.com_rx_tx_process:
-            COM_Manager.pressure_readings = Manager().dict()
+            COM_Manager.device_readings = Manager().dict()
+            COM_Manager.device_readings['pressures'] = {}
+            COM_Manager.device_readings['battery'] = {}
+            COM_Manager.signal_lock = Lock()
+            COM_Manager.embedded_signals = Manager().list()
             COM_Manager.pressure_faults = Manager().dict()
             COM_Manager.write_buffer = Manager().Queue()
             COM_Manager.serial_com = None
 
-            COM_Manager.com_rx_tx_process = Process(target=start_rx_tx, args=(COM_Manager.pressure_readings, COM_Manager.pressure_faults, COM_Manager.write_buffer,))
+            COM_Manager.com_rx_tx_process = Process(target=start_rx_tx, args=(
+                COM_Manager.device_readings,
+                COM_Manager.embedded_signals,
+                COM_Manager.pressure_faults,
+                COM_Manager.write_buffer,)
+            )
             COM_Manager.com_rx_tx_process.start()
             atexit.register(clean_rx_tx, rx_thread=COM_Manager.com_rx_tx_process)
 
@@ -133,12 +229,25 @@ class COM_Manager:
             if device_config_file:
                 self._device_config = self.load_devices_from_file(self._root_config)
 
-        def get_readings(self, debug=False):
+        def get_readings(self):
             """Return a dictionary with key,value pairs of pressure sensors to their
             most recent values"""
-            readings = copy.deepcopy(COM_Manager.pressure_readings)
+            pressure_readings = copy.deepcopy(COM_Manager.device_readings)['pressures']
 
-            return {self._device_config['devices'].get(p_uuid, p_uuid): v for p_uuid, v in readings.items()}
+            return {self._device_config['devices'].get(p_uuid, p_uuid): v for p_uuid, v in pressure_readings.items()}
+
+        def get_battery(self):
+            """Return a dictionary with key,value pairs of devices to their
+            current battery values"""
+            battery_readings = copy.deepcopy(COM_Manager.device_readings)['battery']
+
+            return {self._device_config['devices'].get(p_uuid, p_uuid): v for p_uuid, v in battery_readings.items()}
+
+        def get_last_embedded_signals(self):
+            """Return a list of the signals in the embedded signal queue"""
+            signals = copy.deepcopy(COM_Manager.embedded_signals)
+
+            return signals
 
         def send_pneu_ctrl(self, signal):
             COM_Manager.write_buffer.put(signal)
@@ -149,7 +258,6 @@ class COM_Manager:
 
         def set_device_label(self, dev_uuid, dev_label):
             self._device_config['devices'][dev_uuid] = dev_label
-            # TODO: check that the label is unique
 
             self._save_device_config()
 
@@ -157,11 +265,16 @@ class COM_Manager:
             """Change a device label in the device config"""
             res = False
 
+            # replace an existing label
             for dev_id, label in self._device_config['devices'].items():
                 if label == old_label:
                     self._device_config['devices'][dev_id] = dev_label
                     res = True
                     break
+
+            # make a new label
+            if not res:
+                self._device_config['devices'][old_label] = dev_label
 
             self._save_device_config()
             return res

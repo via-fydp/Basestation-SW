@@ -1,0 +1,13 @@
+[Unit]
+Description=VNC starup service
+StartLimitIntervalSec=0
+
+[Service]
+Type=standard
+Restart=always
+RestartSec=1
+User=via
+ExecStart=/fydp/Basestation-SW/vnc-startup.sh
+
+[Install]
+WantedBy=multi-user.target
