@@ -1,0 +1,132 @@
+<?xml version="1.0" ?>
+<test_procedure>
+  <created_date>2020-04-27</created_date>
+  <author>FYDP</author>
+  <test_id>baba9fc2-fa8c-4925-9409-232e4c1ee3f2</test_id>
+  <steps>
+    <step>
+      <id>1</id>
+      <readings>
+        <reading>
+          <label>Brake Line</label>
+          <sensor_id>line_pressure_sensor</sensor_id>
+        </reading>
+      </readings>
+      <controls/>
+      <procedure>
+        <setup>
+          <id>setup</id>
+          <action>perform:set_flow:(3,)</action>
+          <action>perform:wait_for_pressure:('pressure_sensor_1', 'greater_than', 110)</action>
+          <action>check:pressure_1:sensor:('pressure_sensor_1',)</action>
+          <action>perform:set_flow:(5,)</action>
+        </setup>
+        <sub_step>
+          <id>0</id>
+          <action>perform:set_flow:(2,)</action>
+          <action>check:changed_to_lap:user_validate:('Change to Lap?', True)</action>
+        </sub_step>
+        <sub_step>
+          <id>1</id>
+          <action>perform:set_flow:(3,)</action>
+          <action>perform:wait:(5,)</action>
+          <action>check:soap_passed:user_validate:('Soap check passed?', True)</action>
+        </sub_step>
+      </procedure>
+      <validations>
+        <validation>
+          <type>value</type>
+          <parameters>('pressure_1', 'number', 'greater_than', 110)</parameters>
+        </validation>
+        <validation>
+          <type>value</type>
+          <parameters>('changed_to_lap', 'bool', True)</parameters>
+        </validation>
+        <validation>
+          <type>value</type>
+          <parameters>('soap_passed', 'bool', True)</parameters>
+        </validation>
+      </validations>
+    </step>
+    <step>
+      <id>2</id>
+      <readings/>
+      <controls/>
+      <procedure>
+        <setup>
+          <id>setup</id>
+        </setup>
+        <sub_step>
+          <id>0</id>
+          <action>check:validated:user_validate:(&quot;PREPARATION:\n- wheel chocks applied\n- parking brake is released\n- LRC Cars: car connected to 480V source\n- HEP Cars: water raising system valve must be cut-out (isolated)\n- Pressure gauge installed on Brake Cylinder test port\n- Brake pipe connected to test device in 'Service Reduction'\n- Main Reservoir end hose disconnected ond kept vented to atmosphere\n- Brake Pipe and Main Reservoir hoses at other end of the car kept vented to atmosphere&quot;, True)</action>
+        </sub_step>
+      </procedure>
+      <validations>
+        <validation>
+          <type>value</type>
+          <parameters>('validated', 'bool', True)</parameters>
+        </validation>
+      </validations>
+    </step>
+    <step>
+      <id>3</id>
+      <readings/>
+      <controls/>
+      <procedure>
+        <setup>
+          <id>setup</id>
+          <action>perform:set_flow:(5,)</action>
+        </setup>
+        <sub_step>
+          <id>0</id>
+          <action>check:to_quick:user_validate:('Change to Quick Charge', True)</action>
+          <action>perform:set_flow:(1,)</action>
+        </sub_step>
+        <sub_step>
+          <id>1</id>
+          <action>check:to_reduction:user_validate:('Change to Service Reduction', True)</action>
+          <action>perform:set_flow:(5,)</action>
+        </sub_step>
+        <sub_step>
+          <id>2</id>
+          <action>check:air_free:user_input:('Does air escape freely?', 'bool')</action>
+        </sub_step>
+      </procedure>
+      <validations>
+        <validation>
+          <type>value</type>
+          <parameters>('air_free', 'bool', True)</parameters>
+        </validation>
+      </validations>
+    </step>
+    <step>
+      <id>4</id>
+      <readings/>
+      <controls/>
+      <procedure>
+        <setup>
+          <id>setup</id>
+          <action>perform:set_flow:('vent_main',)</action>
+          <action>perform:set_flow:(1,)</action>
+        </setup>
+        <sub_step>
+          <id>0</id>
+          <action>check:None:user_input:('Select True when the system is charged', True)</action>
+        </sub_step>
+        <sub_step>
+          <id>1</id>
+          <action>perform:set_flow:(3,)</action>
+          <action>check:brake_start:sensor:('brake_line',)</action>
+          <action>perform:wait:(60,)</action>
+          <action>check:brake_end:sensor:('brake_line',)</action>
+        </sub_step>
+      </procedure>
+      <validations>
+        <validation>
+          <type>difference</type>
+          <parameters>('brake_start', 'brake_end', 'less_than', 1)</parameters>
+        </validation>
+      </validations>
+    </step>
+  </steps>
+</test_procedure>

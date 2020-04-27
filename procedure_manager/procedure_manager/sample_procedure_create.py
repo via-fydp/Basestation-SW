@@ -6,7 +6,7 @@ SLOW_CHARGE = 2
 QUICK_CHARGE = 1
 
 def build_tp_0():
-    tp_0 = Procedure("test_schema.xsd", "FYDP")
+    tp_0 = Procedure("sample_schema.xsd", "FYDP")
 
     # START STEP 1
     tp_0.add_step(1)
@@ -94,16 +94,7 @@ def build_tp_0():
     # END STEP 4
 
 
-    # START STEP 6
-    # tp_0.add_step(6)
-    # step6 = tp_0.get_step(6)
-
-    # step4.intro().set_dialogue(STEP6_INTRO)
-    # step4.setup().add_step("set_flow", QUICK_CHARGE)
-    # END STEP 6
-
-
-    tp_0.write_and_verify("output.xml")
+    tp_0.write_and_verify("sample_procedure_output.xml")
 
 
 if __name__ == "__main__":
