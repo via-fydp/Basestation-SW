@@ -41,9 +41,10 @@ class Fake_COM:
         print(msg)
 
 def validate_pressures(fault, p1, p2):
-    """  """
+    """ Perform software checks to determine whether a set of pressure readings
+    received from a sensor make sense and register faults. """
     if int(fault):
-        return "FAULT"
+        return "ERR"
 
     i_p1 = float(p1)
     i_p2 = float(p2)
@@ -54,6 +55,7 @@ def validate_pressures(fault, p1, p2):
     return (i_p1 + i_p2)/2
 
 def register_signal(context, signal):
+    """ Save a signal to the signal history """
     sig_queue = context['signals_list']
 
     if len(sig_queue) >= SIGNAL_HISTORY:
@@ -62,36 +64,51 @@ def register_signal(context, signal):
     sig_queue.append(signal)
 
 def record_pressure(context, signal):
+    """ Record a pressure reading """
     _, sens_uuid, fault, p1, p2 = signal.split('_')
     fault_dict = context['fault_dict']
+
+    # copy a temporary version of the shared memory pressure readings dictionary
     reading_dict = context['reading_dict']['pressures']
 
+    # if the pressure sensor is recorded as faulty, return FAULT
     if fault_dict.get(sens_uuid, 0) > FAILED_SENSOR_THRESHOLD:
         reading_dict[sens_uuid] = "FAULT"
         return
 
+    # validate the pressure readings
     pressure_result = validate_pressures(fault, p1, p2)
     reading_dict[sens_uuid] = pressure_result
 
+    # if there is a pressure sensor fault detected, increment the number of faults
+    # recorded for that sensor
+    # if the number of failures is too large, register a permanent fault
     if pressure_result == "ERR":
         fault_dict[sens_uuid] = fault_dict.get(sens_uuid, 0) + 1
         if fault_dict[sens_uuid] > FAILED_SENSOR_THRESHOLD:
             reading_dict[sens_uuid] = "FAULT"
 
+    # save the pressure readings back to the shared memory object
     context['reading_dict']['pressures'] = reading_dict
 
 def record_battery(context, signal):
     _, device_uuid, val, _, charging = signal.split('_')
+
+    # copy a temporary version of the shared memory battery readings dictionary
     reading_dict = context['reading_dict']['battery']
     reading_dict[device_uuid] = {'value': val, 'charging': charging}
+
+    # save the updated battery readings back to the shared memory object
     context['reading_dict']['battery'] = reading_dict
 
 def register_signal_ack_nack(context, sig):
     pass
 
 def no_valid_signal(*args):
-    print("Signal invalid")
+    logger = logging.getLogger("COM_logger")
+    logger.error("Signal invalid")
 
+# correlate a signal word with the associated functionality
 signal_func = {
     'pressure': record_pressure,
     'battery': record_battery,
@@ -100,6 +117,7 @@ signal_func = {
 }
 
 def read_signals(reading_dict, signals_queue, fault_dict, serial_com):
+    """ rx process to read and acto on signals from the embedded controller  """
     logger = logging.getLogger("COM_logger")
 
     context = {
@@ -126,6 +144,7 @@ def read_signals(reading_dict, signals_queue, fault_dict, serial_com):
 
 
 def write_pressure(write_buffer, serial_com):
+    """ Write signals that have been placed in the write queue """
     while(True):
         while(not write_buffer.empty()):
             msg = write_buffer.get()
@@ -155,6 +174,7 @@ def start_rx_tx(reading_dict, signals_queue, fault_dict, write_buffer):
     if DEBUG:
         serial_com = Fake_COM()
     else:
+        # wait for a connection to the embedded controller
         connection = 0
         while not connection:
             try:
@@ -168,6 +188,7 @@ def start_rx_tx(reading_dict, signals_queue, fault_dict, write_buffer):
                 logger.error(f"Error creating serial port: {err}")
                 time.sleep(2)
 
+    # start tx/rx threads
     rx_thread = threading.Thread(
         target=read_signals,
         args=(reading_dict, signals_queue, fault_dict, serial_com,)
@@ -180,6 +201,7 @@ def start_rx_tx(reading_dict, signals_queue, fault_dict, write_buffer):
     rx_thread.start()
     tx_thread.start()
 
+    # wait indefinitely
     rx_thread.join()
 
 
@@ -198,6 +220,8 @@ class COM_Manager:
 
     def __init__(self):
         if not COM_Manager.com_rx_tx_process:
+            # spin off a process to manage device ocommunications and set up
+            # shared memory objects
             COM_Manager.device_readings = Manager().dict()
             COM_Manager.device_readings['pressures'] = {}
             COM_Manager.device_readings['battery'] = {}
@@ -214,9 +238,11 @@ class COM_Manager:
                 COM_Manager.write_buffer,)
             )
             COM_Manager.com_rx_tx_process.start()
+            # register the rx thread for cleanup on server shutdown
             atexit.register(clean_rx_tx, rx_thread=COM_Manager.com_rx_tx_process)
 
         if not COM_Manager.instance:
+            # this allows the COM_Manager to maintain the singleton design principal
             COM_Manager.instance = COM_Manager.__COM_Manager()
 
     def __getattr__(self, name):
@@ -261,13 +287,16 @@ class COM_Manager:
             return signals
 
         def send_pneu_ctrl(self, signal):
+            """ Add a pneumatic control signal to the write queue """
             COM_Manager.write_buffer.put(signal)
 
         def _save_device_config(self):
+            """ Save the device config dictionary to a file """
             with open(self._device_config_file, 'w') as config_file:
                 json.dump(self._device_config, config_file)
 
         def set_device_label(self, dev_uuid, dev_label):
+            """ Set a new device label """
             self._device_config['devices'][dev_uuid] = dev_label
 
             self._save_device_config()
@@ -291,6 +320,7 @@ class COM_Manager:
             return res
 
         def clear_device_label(self, label):
+            """ Clear a device label """
             if label == 'all':
                 self._device_config['devices'] = {}
             else:
