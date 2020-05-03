@@ -1,3 +1,6 @@
+""" Manages serial communications with the embedded processor and stores the
+relevant state """
+
 import atexit
 import copy
 import yaml
@@ -11,12 +14,23 @@ import os
 import serial
 import serial.tools.list_ports
 
+# The error margin allowed between pressure sensors on the same WPSU before the
+# reading is considered an error. This is psi*1000
 FAULTY_PRESSURE_OFFSET = 300
+
+# The number of faulty readings that will be tolerated before a WPSU is
+# considered faulty until the next boot
 FAILED_SENSOR_THRESHOLD = 5
+
+# How many control signals passed between the embedded controller and server
+# are stored for active retrieval
 SIGNAL_HISTORY = 50
+
 DEBUG = 0
 
 class Fake_COM:
+    """ A very basic fake comport class that gives a simple mock to run the server
+    without a board connected """
     def __init__(self):
         pass
 
@@ -26,17 +40,14 @@ class Fake_COM:
     def write(self, msg):
         print(msg)
 
-def register_failed_sensor():
-    pass
-
 def validate_pressures(fault, p1, p2):
+    """  """
     if int(fault):
         return "FAULT"
 
     i_p1 = float(p1)
     i_p2 = float(p2)
 
-    # TODO: consider putting math elsewhere
     if abs(i_p1-i_p2) > FAULTY_PRESSURE_OFFSET:
         return "ERR"
 
